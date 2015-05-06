@@ -25,29 +25,28 @@ module OmniAuth
         { :raw_info => get_user_info }
       end
 
-      def creds
-        self.access_token
-      end
-
       def request_phase
         slug = session['omniauth.params']['origin'].gsub(/\//,"")
-        redirect authorize_url + "?redirectURL=" + callback_url + "?slug=#{slug}"
+        redirect authorize_url + "?returnURL=" + callback_url + "?slug=#{slug}"
       end
 
       def callback_phase
-        self.access_token = {
-          :token => customer_token
-        }
-
         self.env['omniauth.auth'] = auth_hash
         self.env['omniauth.origin'] = '/' + request.params['slug']
         call_app!
       end
 
+      def credentials
+        {
+          soap_poin_url: soap_poin_url,
+          authentication_token: authentication_token
+        }
+      end
+
       def auth_hash
         hash = AuthHash.new(:provider => name, :uid => uid)
         hash.info = info
-        hash.credentials = creds
+        hash.credentials = credentials
         hash
       end
 
@@ -59,7 +58,8 @@ module OmniAuth
           last_name: @doc.xpath('//LastName').text,
           email: @doc.xpath('//Email').text,
           full_name: @doc.xpath('//FullName').text,
-          IMISID: @doc.xpath('//IMISID').text
+          IMISID: @doc.xpath('//IMISID').text,
+          username: @doc.xpath('//IMISID').text
         }
       end
 
@@ -83,7 +83,7 @@ module OmniAuth
 
       def get_user_info
         @response ||= RestClient.post( soap_poin_url,
-          build_xml_getUserbyUserID(session['omniauth.params']['memberID'], authentication_token),
+          build_xml_getUserbyUserID(request.params['memberID'], authentication_token),
           { "Content-Type" => "text/xml;" }
         )
 
@@ -94,11 +94,11 @@ module OmniAuth
         end
       end
 
+      private
+
       def soap_poin_url
         "#{options.client_options.site}#{options.client_options.soap_poin}"
       end
-
-      private
 
       def authorize_url
         options.client_options.authorize_url
