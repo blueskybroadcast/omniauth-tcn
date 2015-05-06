@@ -50,6 +50,12 @@ module OmniAuth
         hash
       end
 
+      def raw_assigned_roles
+        @doc_assigned_roles ||= Nokogiri::XML(get_assigned_roles)
+        @doc_assigned_roles.remove_namespaces!
+        @doc_assigned_roles.xpath('//assignedRolesResult').text
+      end
+
       def raw_user_info
         @doc ||= Nokogiri::XML(get_user_info)
         @doc.remove_namespaces!
@@ -59,8 +65,63 @@ module OmniAuth
           email: @doc.xpath('//Email').text,
           full_name: @doc.xpath('//FullName').text,
           IMISID: @doc.xpath('//IMISID').text,
-          username: @doc.xpath('//IMISID').text
+          username: @doc.xpath('//IMISID').text,
+          member_type: raw_assigned_roles.split(",").first
         }
+      end
+
+      def get_assigned_roles
+        @response ||= RestClient.post( soap_poin_url,
+          build_xml_assignedRoles(request_member_id, authentication_token),
+          { "Content-Type" => "text/xml;" }
+        )
+
+        if @response.code == 200
+          @response.body
+        else
+          raise "Bad response from server TCN"
+        end
+      end
+
+      def get_user_info
+        @response ||= RestClient.post( soap_poin_url,
+          build_xml_getUserbyUserID(request_member_id, authentication_token),
+          { "Content-Type" => "text/xml;" }
+        )
+
+        if @response.code == 200
+          @response.body
+        else
+          raise "Bad response from server TCN"
+        end
+      end
+
+      private
+
+      def authorize_url
+        options.client_options.authorize_url
+      end
+
+      def authentication_token
+        options.client_options.authentication_token
+      end
+
+      def build_xml_assignedRoles user_id, key
+        xml_builder = ::Builder::XmlMarkup.new
+        xml_builder.instruct! :xml, :version=>"1.0", :encoding=>"utf-8"
+        xml_builder.soap12 :Envelope, "xmlns:xsi"=>"http://www.w3.org/2001/XMLSchema-instance", "xmlns:xsd"=>"http://www.w3.org/2001/XMLSchema", "xmlns:soap12"=>"http://www.w3.org/2003/05/soap-envelope" do
+          xml_builder.soap12 :Header do
+            xml_builder.UserKey  xmlns: "http://NACBAweb_service.org/" do
+              xml_builder.Key key
+            end
+          end
+          xml_builder.soap12 :Body do
+            xml_builder.assignedRoles xmlns: "http://NACBAweb_service.org/" do
+              xml_builder.imisid user_id
+            end
+          end
+        end
+        xml_builder.target!
       end
 
       def build_xml_getUserbyUserID user_id, key
@@ -81,31 +142,12 @@ module OmniAuth
         xml_builder.target!
       end
 
-      def get_user_info
-        @response ||= RestClient.post( soap_poin_url,
-          build_xml_getUserbyUserID(request.params['memberID'], authentication_token),
-          { "Content-Type" => "text/xml;" }
-        )
-
-        if @response.code == 200
-          @response.body
-        else
-          raise "Bad response from server TCN"
-        end
-      end
-
-      private
-
       def soap_poin_url
         "#{options.client_options.site}#{options.client_options.soap_poin}"
       end
 
-      def authorize_url
-        options.client_options.authorize_url
-      end
-
-      def authentication_token
-        options.client_options.authentication_token
+      def request_member_id
+        request.params['memberID']
       end
     end
   end
