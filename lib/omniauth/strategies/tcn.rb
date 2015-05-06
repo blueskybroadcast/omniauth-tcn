@@ -31,14 +31,7 @@ module OmniAuth
 
       def request_phase
         slug = session['omniauth.params']['origin'].gsub(/\//,"")
-
-        auth_request = authorize(callback_url, slug)
-        redirect auth_request["data"]["authUrl"]
-      end
-
-      def request_phase
-        slug = session['omniauth.params']['origin'].gsub(/\//,"")
-        redirect authorize_url + "&redirectURL=" + callback_url + "?slug=#{slug}"
+        redirect authorize_url + "?redirectURL=" + callback_url + "?slug=#{slug}"
       end
 
       def callback_phase
@@ -70,9 +63,9 @@ module OmniAuth
         }
       end
 
-      def build_xml_getUserbyUserID iMISID, key
+      def build_xml_getUserbyUserID user_id, key
         xml_builder = ::Builder::XmlMarkup.new
-        xml_builder.instruct! :xml, :version=>"1.0", :encoding=>"UTF-8"
+        xml_builder.instruct! :xml, :version=>"1.0", :encoding=>"utf-8"
         xml_builder.soap12 :Envelope, "xmlns:xsi"=>"http://www.w3.org/2001/XMLSchema-instance", "xmlns:xsd"=>"http://www.w3.org/2001/XMLSchema", "xmlns:soap12"=>"http://www.w3.org/2003/05/soap-envelope" do
           xml_builder.soap12 :Header do
             xml_builder.UserKey  xmlns: "http://NACBAweb_service.org/" do
@@ -81,7 +74,7 @@ module OmniAuth
           end
           xml_builder.soap12 :Body do
             xml_builder.getUserbyUserID xmlns: "http://NACBAweb_service.org/" do
-              xml_builder.iMISID iMISID
+              xml_builder.iMISID user_id
             end
           end
         end
@@ -89,9 +82,9 @@ module OmniAuth
       end
 
       def get_user_info
-        @response ||= RestClient.post( soap_poin_url, 
+        @response ||= RestClient.post( soap_poin_url,
           build_xml_getUserbyUserID(session['omniauth.params']['memberID'], authentication_token),
-          { "Content-Type" => "application/soap+xml; charset=utf-8" }
+          { "Content-Type" => "text/xml;" }
         )
 
         if @response.code == 200
