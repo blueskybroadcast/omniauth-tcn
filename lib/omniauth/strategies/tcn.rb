@@ -22,7 +22,7 @@ module OmniAuth
       end
 
       extra do
-        { :raw_info => get_user_info }
+        { :raw_info => raw_user_info }
       end
 
       def request_phase
@@ -50,6 +50,10 @@ module OmniAuth
         hash
       end
 
+      def member_type
+        @member_type ||= raw_assigned_roles.split(",").first
+      end
+
       def raw_assigned_roles
         @doc_assigned_roles ||= Nokogiri::XML(get_assigned_roles)
         @doc_assigned_roles.remove_namespaces!
@@ -66,45 +70,37 @@ module OmniAuth
           full_name: @doc.xpath('//FullName').text,
           IMISID: @doc.xpath('//IMISID').text,
           username: @doc.xpath('//IMISID').text,
-          member_type: raw_assigned_roles.split(",").first
+          member_type: member_type
         }
       end
 
       def get_assigned_roles
-        @response ||= RestClient.post( soap_poin_url,
-          build_xml_assignedRoles(request_member_id, authentication_token),
-          { "Content-Type" => "text/xml;" }
+        @roles_response ||= RestClient.post( soap_poin_url,
+          build_xml_assignedRoles(request.params['memberID'], authentication_token),
+          { "Content-Type" => "application/soap+xml; charset=utf-8" }
         )
 
-        if @response.code == 200
-          @response.body
+        if @roles_response.code == 200
+          @roles_response.body
         else
-          raise "Bad response from server TCN"
+          raise "Bad get assigned roles response from server TCN"
         end
       end
 
       def get_user_info
-        @response ||= RestClient.post( soap_poin_url,
-          build_xml_getUserbyUserID(request_member_id, authentication_token),
-          { "Content-Type" => "text/xml;" }
+        @user_response ||= RestClient.post( soap_poin_url,
+          build_xml_getUserbyUserID(request.params['memberID'], authentication_token),
+          { "Content-Type" => "application/soap+xml; charset=utf-8" }
         )
 
-        if @response.code == 200
-          @response.body
+        if @user_response.code == 200
+          @user_response.body
         else
-          raise "Bad response from server TCN"
+          raise "Bad get user by user id response from server TCN"
         end
       end
 
       private
-
-      def authorize_url
-        options.client_options.authorize_url
-      end
-
-      def authentication_token
-        options.client_options.authentication_token
-      end
 
       def build_xml_assignedRoles user_id, key
         xml_builder = ::Builder::XmlMarkup.new
@@ -142,12 +138,16 @@ module OmniAuth
         xml_builder.target!
       end
 
-      def soap_poin_url
-        "#{options.client_options.site}#{options.client_options.soap_poin}"
+      def authorize_url
+        options.client_options.authorize_url
       end
 
-      def request_member_id
-        request.params['memberID']
+      def authentication_token
+        options.client_options.authentication_token
+      end
+
+      def soap_poin_url
+        "#{options.client_options.site}#{options.client_options.soap_poin}"
       end
     end
   end
