@@ -9,8 +9,8 @@ module OmniAuth
       option :name, 'tcn'
 
       option :client_options, {
-        authorize_url: 'http://member.thechurchnetwork.com/Online/ssologin.aspx',
-        site: 'http://devrise.nacba.net',
+        authorize_url: 'MUST BE SET',
+        site: 'MUST BE SET',
         soap_poin: '/NACBAweb_service/nacbaweb_service.asmx',
         authentication_token: 'MUST BE SET'
       }
