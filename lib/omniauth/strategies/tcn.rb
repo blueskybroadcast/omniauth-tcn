@@ -6,6 +6,8 @@ require 'rest_client'
 module OmniAuth
   module Strategies
     class Tcn < OmniAuth::Strategies::OAuth2
+      option :app_options, { app_event_id: nil }
+
       option :name, 'tcn'
 
       option :client_options, {
@@ -31,8 +33,14 @@ module OmniAuth
       end
 
       def callback_phase
+        slug = request.params['slug']
+        account = Account.find_by(slug: slug)
+        @app_event = account.app_events.where(id: options.app_options.app_event_id).first_or_create(activity_type: 'sso')
+
         self.env['omniauth.auth'] = auth_hash
-        self.env['omniauth.origin'] = '/' + request.params['slug']
+        self.env['omniauth.origin'] = '/' + slug
+        self.env['omniauth.app_event_id'] = @app_event.id
+        finalize_app_event
         call_app!
       end
 
@@ -75,27 +83,39 @@ module OmniAuth
       end
 
       def get_assigned_roles
-        @roles_response ||= RestClient.post( soap_poin_url,
-          build_xml_assignedRoles(request.params['memberID'], authentication_token),
+        payload = build_xml_assignedRoles(request.params['memberID'], authentication_token)
+        request_log = "TCN Authentication Request:\nPOST #{soap_poin_url}, payload:\n#{payload}"
+        @app_event.logs.create(level: 'info', text: request_log)
+        @roles_response ||= RestClient.post(soap_poin_url, payload,
           { "Content-Type" => "application/soap+xml; charset=utf-8" }
         )
+        response_log = "TCN Authentication Response (code: #{@roles_response&.code}):\n#{@roles_response.inspect}"
 
         if @roles_response.code == 200
+          @app_event.logs.create(level: 'info', text: response_log)
           @roles_response.body
         else
+          @app_event.logs.create(level: 'error', text: response_log)
+          @app_event.fail! if @app_event.in_progress?
           raise "Bad get assigned roles response from server TCN"
         end
       end
 
       def get_user_info
-        @user_response ||= RestClient.post( soap_poin_url,
-          build_xml_getUserbyUserID(request.params['memberID'], authentication_token),
+        payload = build_xml_getUserbyUserID(request.params['memberID'], authentication_token)
+        request_log = "TCN Authentication Request:\nPOST #{soap_poin_url}, payload:\n#{payload}"
+        @app_event.logs.create(level: 'info', text: request_log)
+        @user_response ||= RestClient.post(soap_poin_url, payload,
           { "Content-Type" => "application/soap+xml; charset=utf-8" }
         )
+        response_log = "TCN Authentication Response (code: #{@user_response&.code}):\n#{@user_response.inspect}"
 
         if @user_response.code == 200
+          @app_event.logs.create(level: 'info', text: response_log)
           @user_response.body
         else
+          @app_event.logs.create(level: 'error', text: response_log)
+          @app_event.fail! if @app_event.in_progress?
           raise "Bad get user by user id response from server TCN"
         end
       end
@@ -148,6 +168,19 @@ module OmniAuth
 
       def soap_poin_url
         "#{options.client_options.site}#{options.client_options.soap_poin}"
+      end
+
+      def finalize_app_event
+        app_event_data = {
+          user_info: {
+            uid: info[:IMISID],
+            first_name: info[:first_name],
+            last_name: info[:last_name],
+            email: info[:email]
+          }
+        }
+
+        @app_event.update(raw_data: app_event_data)
       end
     end
   end
