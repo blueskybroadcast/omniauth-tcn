@@ -84,7 +84,7 @@ module OmniAuth
 
       def get_assigned_roles
         payload = build_xml_assignedRoles(request.params['memberID'], authentication_token)
-        request_log = "TCN Authentication Request:\nPOST #{soap_poin_url}, payload:\n#{payload}"
+        request_log = "TCN Authentication Request:\nPOST #{soap_poin_url}, payload:\n#{filtered_payload(payload)}"
         @app_event.logs.create(level: 'info', text: request_log)
         @roles_response ||= RestClient.post(soap_poin_url, payload,
           { "Content-Type" => "application/soap+xml; charset=utf-8" }
@@ -103,8 +103,9 @@ module OmniAuth
 
       def get_user_info
         payload = build_xml_getUserbyUserID(request.params['memberID'], authentication_token)
-        request_log = "TCN Authentication Request:\nPOST #{soap_poin_url}, payload:\n#{payload}"
+        request_log = "TCN Authentication Request:\nPOST #{soap_poin_url}, payload:\n#{filtered_payload(payload)}"
         @app_event.logs.create(level: 'info', text: request_log)
+
         @user_response ||= RestClient.post(soap_poin_url, payload,
           { "Content-Type" => "application/soap+xml; charset=utf-8" }
         )
@@ -181,6 +182,10 @@ module OmniAuth
         }
 
         @app_event.update(raw_data: app_event_data)
+      end
+
+      def filtered_payload(payload)
+        payload.inspect.gsub(/Key>.*<\/Key/, "Key>#{Provider::SECURITY_MASK}</Key")
       end
     end
   end
